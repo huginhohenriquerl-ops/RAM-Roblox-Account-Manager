@@ -1,0 +1,26 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Claude Desktop — light -->
+    <SolidColorBrush x:Key="Bg.Main" Color="#FAF9F5"/>
+    <SolidColorBrush x:Key="Bg.Sidebar" Color="#F3F1EA"/>
+    <SolidColorBrush x:Key="Bg.Card" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="Bg.Subtle" Color="#F0EEE6"/>
+    <SolidColorBrush x:Key="Bg.Hover" Color="#1F1E1D" Opacity="0.055"/>
+    <SolidColorBrush x:Key="Bg.Selected" Color="#1F1E1D" Opacity="0.09"/>
+    <SolidColorBrush x:Key="Border" Color="#1F1E1D" Opacity="0.12"/>
+    <SolidColorBrush x:Key="Border.Strong" Color="#1F1E1D" Opacity="0.24"/>
+    <SolidColorBrush x:Key="Text.Primary" Color="#141413"/>
+    <SolidColorBrush x:Key="Text.Secondary" Color="#3D3D3A"/>
+    <SolidColorBrush x:Key="Text.Muted" Color="#73726C"/>
+    <SolidColorBrush x:Key="Text.Inverse" Color="#FAF9F5"/>
+    <SolidColorBrush x:Key="Accent" Color="#D97757"/>
+    <SolidColorBrush x:Key="Accent.Hover" Color="#C6613F"/>
+    <SolidColorBrush x:Key="Accent.Soft" Color="#D97757" Opacity="0.15"/>
+    <SolidColorBrush x:Key="Success" Color="#3F8F4E"/>
+    <SolidColorBrush x:Key="Success.Soft" Color="#3F8F4E" Opacity="0.13"/>
+    <SolidColorBrush x:Key="Danger" Color="#B53333"/>
+    <SolidColorBrush x:Key="Danger.Soft" Color="#B53333" Opacity="0.10"/>
+    <SolidColorBrush x:Key="Overlay" Color="#141413" Opacity="0.30"/>
+    <SolidColorBrush x:Key="Tooltip.Bg" Color="#141413"/>
+    <SolidColorBrush x:Key="Tooltip.Fg" Color="#FAF9F5"/>
+</ResourceDictionary>

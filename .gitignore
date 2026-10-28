@@ -1,0 +1,11 @@
+bin/
+obj/
+dist/
+publish/
+Releases/
+.vs/
+*.user
+*.suo
+
+# third-party binary used only for the reverse-engineering notes
+MultiBloxy.exe

@@ -1,0 +1,47 @@
+# Push a tag like v1.2.3 to build the installer and publish a GitHub release.
+# Installed copies of R.A.M pick the new release up automatically (Velopack + GitHub releases).
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Version from tag
+        id: version
+        shell: pwsh
+        run: echo "value=$('${{ github.ref_name }}'.TrimStart('v'))" >> $env:GITHUB_OUTPUT
+
+      - name: Install vpk
+        run: dotnet tool install -g vpk --version 1.2.161
+
+      - name: Publish
+        run: dotnet publish RAM.csproj -c Release -r win-x64 --self-contained false -p:Version=${{ steps.version.outputs.value }} -o publish
+
+      - name: Previous release (for delta updates)
+        continue-on-error: true
+        run: vpk download github --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }} --outputDir Releases
+
+      - name: Pack installer
+        run: >
+          vpk pack --packId RAM.AccountManager --packVersion ${{ steps.version.outputs.value }}
+          --packDir publish --mainExe RAM.exe --packTitle "R.A.M" --packAuthors "R.A.M"
+          --icon Assets/ram.ico --splashImage Assets/splash.png --splashProgressColor "#D97757"
+          --framework net8.0-x64-desktop --outputDir Releases
+
+      - name: Upload release
+        run: >
+          vpk upload github --repoUrl https://github.com/${{ github.repository }} --token ${{ secrets.GITHUB_TOKEN }}
+          --outputDir Releases --publish --releaseName "R.A.M ${{ steps.version.outputs.value }}" --tag ${{ github.ref_name }} --merge
