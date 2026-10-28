@@ -96,6 +96,11 @@ public partial class MainWindow : Window
         App.Store.Accounts.CollectionChanged += (_, _) => UpdateHome();
         App.Multi.StateChanged += (_, _) => UpdateMultiUi();
         App.Tracker.Changed += (_, _) => UpdateInstancesUi();
+        App.Tracker.AccountStarted += (_, account) =>
+        {
+            foreach (var step in _steps.Where(s => s.Account == account && s.State == StepState.Done))
+                step.Status = "Aberto";
+        };
         App.ThemeChanged += (_, _) => UpdateThemeUi();
         // Progress callbacks arrive on download threads.
         App.Updater.Changed += (_, _) => Dispatcher.BeginInvoke(UpdateUpdaterUi);
@@ -271,7 +276,10 @@ public partial class MainWindow : Window
         SelectionText.Text = n switch { 0 => "Nenhuma conta", 1 => "1 conta", _ => $"{n} contas" };
         SelectAllBtn.Content = n > 0 && n == AccountList.Items.Count ? "Limpar seleção" : "Selecionar todas";
         SelectedChips.Visibility = n > 0 ? Visibility.Visible : Visibility.Collapsed;
-        SendBtn.IsEnabled = n > 0 && !_launching && InputParser.Parse(PlaceInput.Text) != null;
+        // An empty box is valid: the arrow then opens Roblox on the home screen, just like "Abrir sem jogo".
+        bool empty = string.IsNullOrWhiteSpace(PlaceInput.Text);
+        SendBtn.IsEnabled = n > 0 && !_launching && (empty || InputParser.Parse(PlaceInput.Text) != null);
+        SendBtn.ToolTip = empty ? "Abrir o Roblox na tela inicial (Enter)" : "Entrar no jogo (Enter)";
         LaunchHomeBtn.IsEnabled = n > 0 && !_launching;
     }
 
@@ -286,7 +294,7 @@ public partial class MainWindow : Window
     {
         if (e.Key != Key.Enter) return;
         e.Handled = true;
-        if (SendBtn.IsEnabled) _ = LaunchSelectedAsync(withTarget: true);
+        if (SendBtn.IsEnabled) _ = LaunchSelectedAsync(withTarget: !string.IsNullOrWhiteSpace(PlaceInput.Text));
     }
 
     void JobToggle_Click(object sender, RoutedEventArgs e)
@@ -370,7 +378,8 @@ public partial class MainWindow : Window
 
     // ───────────────────────── Launching ─────────────────────────
 
-    void Launch_Click(object sender, RoutedEventArgs e) => _ = LaunchSelectedAsync(withTarget: true);
+    void Launch_Click(object sender, RoutedEventArgs e) =>
+        _ = LaunchSelectedAsync(withTarget: !string.IsNullOrWhiteSpace(PlaceInput.Text));
 
     void LaunchHome_Click(object sender, RoutedEventArgs e) => _ = LaunchSelectedAsync(withTarget: false);
 
@@ -466,7 +475,7 @@ public partial class MainWindow : Window
                     RobloxLauncher.Start(RobloxLauncher.BuildUri(ticket, target), App.Settings.DirectLaunch);
                     account.LastLaunchedAt = DateTime.Now;
                     step.State = StepState.Done;
-                    step.Status = "Abrindo";
+                    step.Status = "Esperando a janela do Roblox…";
                     opened++;
                 }
                 catch (RobloxApiException ex)

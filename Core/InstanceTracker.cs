@@ -69,6 +69,9 @@ public sealed class InstanceTracker
     public Func<bool> RenameWindows { get; set; } = () => false;
     public event EventHandler? Changed;
 
+    /// <summary>A Roblox process was attributed to an account that was just launched.</summary>
+    public event EventHandler<Account>? AccountStarted;
+
     public InstanceTracker(ObservableCollection<Account> accounts)
     {
         _accounts = accounts;
@@ -110,6 +113,7 @@ public sealed class InstanceTracker
                     if (pending != null)
                     {
                         pending.AssignedPid = p.Id;
+                        AccountStarted?.Invoke(this, pending.Account);
                         pending.AssignedAt = DateTime.Now;
                         instance.Account = pending.Account;
                     }
