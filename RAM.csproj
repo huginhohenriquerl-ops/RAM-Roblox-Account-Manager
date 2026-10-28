@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -13,7 +13,7 @@
     <RootNamespace>RAM</RootNamespace>
     <StartupObject>RAM.Program</StartupObject>
     <ApplicationIcon>Assets\ram.ico</ApplicationIcon>
-    <Product>R.A.M â€” Roblox Account Manager</Product>
+    <Product>R.A.M — Roblox Account Manager</Product>
     <Version>1.0.1</Version>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
