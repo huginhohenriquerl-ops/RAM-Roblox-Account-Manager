@@ -14,7 +14,7 @@
     <StartupObject>RAM.Program</StartupObject>
     <ApplicationIcon>Assets\ram.ico</ApplicationIcon>
     <Product>R.A.M — Roblox Account Manager</Product>
-    <Version>1.0.1</Version>
+    <Version>1.1.0</Version>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
   </PropertyGroup>
 

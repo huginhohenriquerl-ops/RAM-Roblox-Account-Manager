@@ -9,8 +9,10 @@ namespace RAM;
 
 public partial class App : Application
 {
-    const string SingletonName = @"Local\RAM.Clawd.Singleton";
-    const string ShowSignalName = @"Local\RAM.Clawd.Show";
+    // RAM_INSTANCE (development only) lets a dev build run next to the installed copy.
+    static readonly string InstanceSuffix = Environment.GetEnvironmentVariable("RAM_INSTANCE") ?? "";
+    static readonly string SingletonName = @"Local\RAM.Clawd.Singleton" + InstanceSuffix;
+    static readonly string ShowSignalName = @"Local\RAM.Clawd.Show" + InstanceSuffix;
 
     Mutex? _singleton;
     EventWaitHandle? _showSignal;
@@ -19,6 +21,7 @@ public partial class App : Application
     public static AccountStore Store { get; private set; } = null!;
     public static RobloxApi Api { get; } = new();
     public static MultiInstanceManager Multi { get; } = new();
+    public static SessionIsolation Session { get; } = new();
     public static InstanceTracker Tracker { get; private set; } = null!;
     public static AppUpdater Updater { get; } = new();
 
@@ -113,6 +116,7 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         Multi.Dispose();
+        Session.Dispose();
         Store?.Save();
         Settings?.Save();
         try { _singleton?.ReleaseMutex(); } catch { }

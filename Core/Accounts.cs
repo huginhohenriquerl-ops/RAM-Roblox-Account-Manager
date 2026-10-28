@@ -25,6 +25,12 @@ public sealed class Account : ObservableObject
     public string Cookie { get; set; } = "";
     public DateTime AddedAt { get; set; } = DateTime.Now;
 
+    /// <summary>
+    /// Fixed per account and passed to the client as <c>-b &lt;id&gt;</c>, so a running RobloxPlayerBeta can be
+    /// mapped back to its account from its command line (same idea as Roblox Account Manager's BrowserTrackerID).
+    /// </summary>
+    public string? BrowserTrackerId { get; set; }
+
     public string Username
     {
         get => _username;

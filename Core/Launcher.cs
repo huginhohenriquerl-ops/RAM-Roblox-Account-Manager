@@ -10,7 +10,8 @@ using Microsoft.Win32;
 namespace RAM.Core;
 
 /// <summary>Where to send an account. A null target means "open the Roblox app on the home screen".</summary>
-public sealed record LaunchTarget(long PlaceId, string? JobId = null, string? LinkCode = null, string? ShareCode = null)
+public sealed record LaunchTarget(long PlaceId, string? JobId = null, string? LinkCode = null, string? ShareCode = null,
+    string ShareType = "Server")
 {
     public bool NeedsResolve => ShareCode != null && PlaceId == 0;
 }
@@ -24,6 +25,7 @@ public static class InputParser
     static readonly Regex LinkCodeRx = new(@"privateServerLinkCode=([\w-]+)", RegexOptions.IgnoreCase);
     static readonly Regex InstanceRx = new(@"(?:gameInstanceId|jobId|gameId)=([0-9a-fA-F-]{36})", RegexOptions.IgnoreCase);
     static readonly Regex ShareRx = new(@"/share\?.*?code=([A-Za-z0-9]+)", RegexOptions.IgnoreCase);
+    static readonly Regex ShareTypeRx = new(@"[?&]type=(Server|ExperienceInvite)\b", RegexOptions.IgnoreCase);
 
     public static LaunchTarget? Parse(string input, string? jobInput = null)
     {
@@ -37,9 +39,12 @@ public static class InputParser
             if (m.Success) job = m.Value;
         }
 
+        // roblox.com/share?code=…&type=Server (private server) or type=ExperienceInvite (a friend's server)
         var share = ShareRx.Match(s);
-        if (share.Success && s.Contains("type=Server", StringComparison.OrdinalIgnoreCase))
-            return new LaunchTarget(0, ShareCode: share.Groups[1].Value);
+        var shareType = ShareTypeRx.Match(s);
+        if (share.Success && shareType.Success)
+            return new LaunchTarget(0, ShareCode: share.Groups[1].Value,
+                ShareType: shareType.Groups[1].Value.Equals("Server", StringComparison.OrdinalIgnoreCase) ? "Server" : "ExperienceInvite");
 
         long placeId = 0;
         Match match;
@@ -60,10 +65,21 @@ public static class RobloxLauncher
 {
     static readonly Random Rng = new();
 
-    public static string BuildUri(string ticket, LaunchTarget? target)
+    static readonly Regex TrackerArgRx = new(@"(?:-b\s+|browsertrackerid[:=])(\d{6,})", RegexOptions.IgnoreCase);
+
+    public static string NewTrackerId() => Rng.Next(100000, 175000).ToString() + Rng.Next(100000, 900000);
+
+    /// <summary>The browser tracker id in a RobloxPlayerBeta command line ("-b 123…" or "browsertrackerid:123…").</summary>
+    public static string? TrackerIdFromCommandLine(string? commandLine)
+    {
+        if (string.IsNullOrEmpty(commandLine)) return null;
+        var m = TrackerArgRx.Match(commandLine);
+        return m.Success ? m.Groups[1].Value : null;
+    }
+
+    public static string BuildUri(string ticket, LaunchTarget? target, string tracker)
     {
         long launchTime = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        string tracker = Rng.Next(100000, 175000).ToString() + Rng.Next(100000, 900000);
         string locale = CultureInfo.CurrentUICulture.Name.Replace('-', '_').ToLowerInvariant();
         if (locale.Length == 0) locale = "en_us";
 

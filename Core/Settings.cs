@@ -19,7 +19,8 @@ public sealed class AppSettings
 
     public bool MultiInstanceOnStartup { get; set; } = true;
     public bool HoldLegacyMutex { get; set; } = true;
-    public bool ReleaseCookieLock { get; set; }
+    public bool IsolateSessions { get; set; } = true;
+    public bool CloseDuplicateSessions { get; set; } = true;
     public bool RenameWindows { get; set; } = true;
     public bool DirectLaunch { get; set; }
     public int LaunchDelaySeconds { get; set; } = 6;

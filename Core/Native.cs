@@ -36,6 +36,12 @@ internal static class Native
     [DllImport("ntdll.dll")]
     public static extern int NtQueryObject(IntPtr handle, int infoClass, IntPtr info, int length, out int returnLength);
 
+    public const int ProcessCommandLineInformation = 60;
+    public const uint PROCESS_QUERY_LIMITED_INFORMATION = 0x1000;
+
+    [DllImport("ntdll.dll")]
+    public static extern int NtQueryInformationProcess(IntPtr process, int infoClass, IntPtr info, int length, out int returnLength);
+
     [DllImport("kernel32.dll", SetLastError = true)]
     public static extern IntPtr OpenProcess(uint access, bool inherit, int pid);
 
@@ -87,6 +93,44 @@ internal static class Native
 
     [DllImport("dwmapi.dll")]
     public static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
+
+    /// <summary>Full command line of another process (Windows 8.1+), or null when it cannot be read.</summary>
+    public static string? GetCommandLine(int pid)
+    {
+        IntPtr process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
+        if (process == IntPtr.Zero) return null;
+        try
+        {
+            int length = 4096;
+            for (int attempt = 0; attempt < 3; attempt++)
+            {
+                IntPtr buffer = Marshal.AllocHGlobal(length);
+                try
+                {
+                    int status = NtQueryInformationProcess(process, ProcessCommandLineInformation, buffer, length, out int needed);
+                    if (status == STATUS_INFO_LENGTH_MISMATCH || status == STATUS_BUFFER_OVERFLOW || status == STATUS_BUFFER_TOO_SMALL)
+                    {
+                        length = Math.Max(needed, length * 2);
+                        continue;
+                    }
+                    if (status != 0) return null;
+                    // UNICODE_STRING { USHORT Length; USHORT MaximumLength; PWSTR Buffer; }
+                    int bytes = (ushort)Marshal.ReadInt16(buffer);
+                    IntPtr text = Marshal.ReadIntPtr(buffer, IntPtr.Size);
+                    return bytes == 0 || text == IntPtr.Zero ? null : Marshal.PtrToStringUni(text, bytes / 2);
+                }
+                finally
+                {
+                    Marshal.FreeHGlobal(buffer);
+                }
+            }
+            return null;
+        }
+        finally
+        {
+            CloseHandle(process);
+        }
+    }
 
     /// <summary>Top-level visible, unowned windows with a caption that belong to <paramref name="pid"/>.</summary>
     public static List<IntPtr> FindMainWindows(int pid)

@@ -298,6 +298,66 @@ public static class RobloxHandleCloser
 }
 
 /// <summary>
+/// Holds RobloxCookies.dat open exclusively, like Roblox Account Manager's "error 773 fix". Every client then keeps
+/// its login only in memory instead of sharing (and overwriting) one cookie file, which is what makes teleports fail
+/// with error 773 and makes one window show another account's home/history.
+/// </summary>
+public sealed class SessionIsolation : IDisposable
+{
+    FileStream? _lock;
+
+    public static string CookiesPath { get; } = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Roblox", "LocalStorage", "RobloxCookies.dat");
+
+    public bool IsActive => _lock != null;
+    public string? LastError { get; private set; }
+
+    public async Task<bool> EnableAsync()
+    {
+        if (_lock != null) return true;
+        LastError = null;
+        var folder = Path.GetDirectoryName(CookiesPath)!;
+        if (!Directory.Exists(folder))
+        {
+            LastError = "Pasta LocalStorage do Roblox não encontrada (o Roblox está instalado?).";
+            return false;
+        }
+        if (TryLock()) return true;
+
+        // A running client holds the file: release its handle (no singleton handles touched), then retry.
+        if (RobloxProcesses.AnyRunning())
+        {
+            await Task.Run(() => RobloxHandleCloser.Run(singletons: false, cookieLock: true));
+            if (TryLock()) return true;
+        }
+        return false;
+    }
+
+    bool TryLock()
+    {
+        try
+        {
+            _lock = new FileStream(CookiesPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            Log.Info("session isolation on");
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            LastError = "O RobloxCookies.dat está em uso: " + ex.Message;
+            return false;
+        }
+    }
+
+    public void Disable()
+    {
+        _lock?.Dispose();
+        _lock = null;
+    }
+
+    public void Dispose() => Disable();
+}
+
+/// <summary>
 /// Keeps Roblox's singleton names occupied so every new client believes it is the only one running.
 /// Must be used from the UI thread: mutex ownership is thread-affine and the UI thread lives as long as the app.
 /// </summary>
@@ -311,7 +371,13 @@ public sealed class MultiInstanceManager : IDisposable
 
     public event EventHandler? StateChanged;
 
-    public bool IsActive => _eventSquatter != null;
+    public bool IsActive => _eventSquatter != null || ProvidedExternally;
+
+    /// <summary>
+    /// Another program (another R.A.M, MultiBloxy, a bootstrapper's multi-instance option…) already holds
+    /// ROBLOX_singletonEvent as a mutex. Roblox's own event then cannot be created either, so multi-instance works.
+    /// </summary>
+    public bool ProvidedExternally { get; private set; }
     public bool LegacyHeld => _legacyMutex != null;
     public string? LastError { get; private set; }
     public HandleScanResult? LastScan { get; private set; }
@@ -328,7 +394,15 @@ public sealed class MultiInstanceManager : IDisposable
     async Task<bool> EnableCoreAsync(bool holdLegacyMutex, bool releaseCookieLock)
     {
         LastError = null;
+        ProvidedExternally = false;
         bool ok = TryHoldAll(holdLegacyMutex);
+        if (!ok && HeldAsMutexElsewhere())
+        {
+            ProvidedExternally = true;
+            Log.Info("multi-instance provided by another program");
+            StateChanged?.Invoke(this, EventArgs.Empty);
+            return true;
+        }
         if ((!ok || (holdLegacyMutex && !LegacyHeld)) && RobloxProcesses.AnyRunning())
         {
             // Roblox already registered the names: close them inside the running clients and retry.
@@ -341,8 +415,16 @@ public sealed class MultiInstanceManager : IDisposable
         return ok;
     }
 
+    static bool HeldAsMutexElsewhere()
+    {
+        if (!Mutex.TryOpenExisting(EventName, out var other)) return false;
+        other.Dispose();
+        return true;
+    }
+
     public void Disable()
     {
+        ProvidedExternally = false;
         Release(ref _eventSquatter);
         Release(ref _legacyMutex);
         StateChanged?.Invoke(this, EventArgs.Empty);

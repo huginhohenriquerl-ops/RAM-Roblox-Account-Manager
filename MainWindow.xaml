@@ -534,16 +534,11 @@
                                 <Border Style="{StaticResource Divider}"/>
                                 <Grid>
                                     <StackPanel>
-                                        <StackPanel Orientation="Horizontal">
-                                            <TextBlock Text="Liberar trava do RobloxCookies.dat" Style="{StaticResource SettingTitle}"/>
-                                            <Border Background="{DynamicResource Accent.Soft}" CornerRadius="6" Padding="6,1" Margin="8,0,0,0" VerticalAlignment="Center">
-                                                <TextBlock Text="experimental" FontSize="11" Foreground="{DynamicResource Accent}"/>
-                                            </Border>
-                                        </StackPanel>
+                                        <TextBlock Text="Isolar as sessões das contas" Style="{StaticResource SettingTitle}"/>
                                         <TextBlock Style="{StaticResource SettingDesc}"
-                                                   Text="Antes de abrir outra conta, fecha o handle exclusivo que o cliente mantém no arquivo de cookies. Use só se a segunda instância não abrir."/>
+                                                   Text="Trava o RobloxCookies.dat enquanto a multi-instância está ativa, para que cada janela guarde só o próprio login. Evita o erro 773 nos teleportes e uma conta mostrando o histórico de outra. Com isso ligado, “Nova instância do Roblox” pede login a cada janela."/>
                                     </StackPanel>
-                                    <CheckBox x:Name="SetCookieLock" Style="{StaticResource Switch}" HorizontalAlignment="Right" Click="Setting_Changed"/>
+                                    <CheckBox x:Name="SetIsolate" Style="{StaticResource Switch}" HorizontalAlignment="Right" Click="Setting_Changed"/>
                                 </Grid>
                             </StackPanel>
                         </Border>
@@ -580,6 +575,15 @@
                                         <TextBlock Style="{StaticResource SettingDesc}" Text="Mostra o nome da conta no título de cada janela (“Roblox — conta”)."/>
                                     </StackPanel>
                                     <CheckBox x:Name="SetRename" Style="{StaticResource Switch}" HorizontalAlignment="Right" Click="Setting_Changed"/>
+                                </Grid>
+                                <Border Style="{StaticResource Divider}"/>
+                                <Grid>
+                                    <StackPanel>
+                                        <TextBlock Text="Fechar a sessão anterior da mesma conta" Style="{StaticResource SettingTitle}"/>
+                                        <TextBlock Style="{StaticResource SettingDesc}"
+                                                   Text="Ao abrir uma conta que já está rodando, fecha a janela antiga antes. Evita o kick “mesma conta em outro dispositivo”."/>
+                                    </StackPanel>
+                                    <CheckBox x:Name="SetCloseDuplicates" Style="{StaticResource Switch}" HorizontalAlignment="Right" Click="Setting_Changed"/>
                                 </Grid>
                             </StackPanel>
                         </Border>

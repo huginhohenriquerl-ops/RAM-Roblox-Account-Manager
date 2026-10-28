@@ -63,6 +63,10 @@ public sealed class InstanceTracker
 
     readonly ObservableCollection<Account> _accounts;
     readonly List<PendingLaunch> _pending = new();
+
+    // Command lines never change, so each process is read once. Roblox's background tray process
+    // ("--launch-to-tray") is not a game window and is kept out of the list.
+    readonly Dictionary<int, string?> _commandLines = new();
     readonly DispatcherTimer _timer;
 
     public ObservableCollection<RobloxInstance> Instances { get; } = new();
@@ -100,23 +104,35 @@ public sealed class InstanceTracker
 
         bool changed = false;
         var alive = new HashSet<int>();
+        var running = new HashSet<int>();
         try
         {
             foreach (var p in processes.OrderBy(SafeStart))
             {
+                running.Add(p.Id);
+                if (!_commandLines.TryGetValue(p.Id, out var commandLine))
+                    _commandLines[p.Id] = commandLine = Native.GetCommandLine(p.Id);
+                if (commandLine?.Contains("--launch-to-tray", StringComparison.OrdinalIgnoreCase) == true) continue;
+
                 alive.Add(p.Id);
                 var instance = Instances.FirstOrDefault(i => i.Pid == p.Id);
                 if (instance == null)
                 {
                     instance = new RobloxInstance(p.Id, SafeStart(p));
-                    var pending = _pending.FirstOrDefault(x => x.AssignedPid == null && !x.KnownPids.Contains(p.Id));
+
+                    // Exact match first: the account's fixed tracker id is on the client's command line.
+                    var tracker = RobloxLauncher.TrackerIdFromCommandLine(commandLine);
+                    var owner = tracker == null ? null : _accounts.FirstOrDefault(a => a.BrowserTrackerId == tracker);
+                    var pending = owner != null
+                        ? _pending.FirstOrDefault(x => x.Account == owner && x.AssignedPid == null)
+                        : _pending.FirstOrDefault(x => x.AssignedPid == null && !x.KnownPids.Contains(p.Id));
                     if (pending != null)
                     {
                         pending.AssignedPid = p.Id;
-                        AccountStarted?.Invoke(this, pending.Account);
                         pending.AssignedAt = DateTime.Now;
-                        instance.Account = pending.Account;
                     }
+                    instance.Account = owner ?? pending?.Account;
+                    if (instance.Account != null && pending != null) AccountStarted?.Invoke(this, instance.Account);
                     Instances.Add(instance);
                     changed = true;
                 }
@@ -127,6 +143,9 @@ public sealed class InstanceTracker
         {
             foreach (var p in processes) p.Dispose();
         }
+
+        foreach (var pid in _commandLines.Keys.Where(pid => !running.Contains(pid)).ToList())
+            _commandLines.Remove(pid);
 
         for (int i = Instances.Count - 1; i >= 0; i--)
         {

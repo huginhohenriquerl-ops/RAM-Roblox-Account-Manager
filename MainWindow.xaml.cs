@@ -328,7 +328,7 @@ public partial class MainWindow : Window
         GameIcon.Source = null;
         if (target.NeedsResolve)
         {
-            GameName.Text = "Servidor privado (link de convite)";
+            GameName.Text = target.ShareType == "Server" ? "Servidor privado (link de convite)" : "Convite para o servidor de um amigo";
             GameMeta.Text = "O jogo é descoberto quando você entrar";
             return;
         }
@@ -457,22 +457,31 @@ public partial class MainWindow : Window
                     if (target is { NeedsResolve: true })
                     {
                         step.Status = "Resolvendo link…";
-                        var (placeId, linkCode) = await App.Api.ResolveShareLinkAsync(account, target.ShareCode!);
-                        target = target with { PlaceId = placeId, LinkCode = linkCode };
+                        var (placeId, linkCode, jobId) = await App.Api.ResolveShareLinkAsync(account, target.ShareCode!, target.ShareType);
+                        target = target with { PlaceId = placeId, LinkCode = linkCode, JobId = jobId ?? target.JobId };
                     }
 
                     var ticket = await App.Api.GetAuthTicketAsync(account);
                     account.IsInvalid = false;
 
-                    if (App.Settings.ReleaseCookieLock && RobloxProcesses.AnyRunning())
+                    // The same account in two clients gets kicked ("same account launched from another device").
+                    var previous = App.Tracker.Instances.Where(x => x.Account == account).Select(x => x.Pid).ToList();
+                    if (App.Settings.CloseDuplicateSessions && previous.Count > 0)
                     {
-                        step.Status = "Liberando cookies…";
-                        await Task.Run(() => RobloxHandleCloser.Run(singletons: false, cookieLock: true));
+                        step.Status = "Fechando a sessão anterior desta conta…";
+                        await Task.WhenAll(previous.Select(pid => RobloxProcesses.CloseAsync(pid, 3000)));
+                        App.Tracker.Refresh();
                     }
+
+                    if (App.Settings.IsolateSessions && App.Multi.IsActive && !App.Session.IsActive)
+                        await ApplySessionIsolationAsync();
+
+                    if (string.IsNullOrEmpty(account.BrowserTrackerId))
+                        account.BrowserTrackerId = RobloxLauncher.NewTrackerId();
 
                     step.Status = "Abrindo Roblox…";
                     App.Tracker.ExpectLaunch(account, RobloxProcesses.GetPids().ToHashSet());
-                    RobloxLauncher.Start(RobloxLauncher.BuildUri(ticket, target), App.Settings.DirectLaunch);
+                    RobloxLauncher.Start(RobloxLauncher.BuildUri(ticket, target, account.BrowserTrackerId), App.Settings.DirectLaunch);
                     account.LastLaunchedAt = DateTime.Now;
                     step.State = StepState.Done;
                     step.Status = "Esperando a janela do Roblox…";
@@ -569,7 +578,8 @@ public partial class MainWindow : Window
     {
         MultiPill.IsEnabled = MultiSwitch.IsEnabled = false;
         MultiPillText.Text = "Ativando…";
-        bool ok = await App.Multi.EnableAsync(App.Settings.HoldLegacyMutex, App.Settings.ReleaseCookieLock);
+        bool ok = await App.Multi.EnableAsync(App.Settings.HoldLegacyMutex, releaseCookieLock: false);
+        if (ok) await ApplySessionIsolationAsync();
         MultiPill.IsEnabled = MultiSwitch.IsEnabled = true;
         if (ok)
         {
@@ -593,12 +603,25 @@ public partial class MainWindow : Window
         if (App.Multi.IsActive)
         {
             App.Multi.Disable();
+            App.Session.Disable();
             ShowToast("Multi-instância desligada.");
         }
         else
         {
             await EnableMultiAsync(quiet: false);
         }
+    }
+
+    /// <summary>Session isolation follows the multi-instance switch and the setting.</summary>
+    async Task ApplySessionIsolationAsync()
+    {
+        if (!App.Settings.IsolateSessions || !App.Multi.IsActive)
+        {
+            App.Session.Disable();
+            return;
+        }
+        if (!await App.Session.EnableAsync())
+            ShowToast("Não consegui isolar as sessões: " + App.Session.LastError, ToastKind.Error);
     }
 
     void UpdateMultiUi()
@@ -608,9 +631,12 @@ public partial class MainWindow : Window
         MultiPillText.Text = on ? "Multi-instância ativa" : "Multi-instância desligada";
         MultiDot.SetResourceReference(Shape.FillProperty, on ? "Success" : "Text.Muted");
         MultiDotHalo.SetResourceReference(Shape.FillProperty, on ? "Success.Soft" : "Bg.Selected");
-        MultiStatusText.Text = on
+        MultiStatusText.Text = App.Multi.ProvidedExternally
+            ? "Ativa — outro programa (outro R.A.M, MultiBloxy ou o seu bootstrapper) já está segurando o ROBLOX_singletonEvent, então a multi-instância já funciona."
+            : on
             ? "Ativa — segurando ROBLOX_singletonEvent" + (App.Multi.LegacyHeld ? " e ROBLOX_singletonMutex" : "") +
-              ". Cada cliente novo acha que é o único aberto."
+              ". Cada cliente novo acha que é o único aberto." +
+              (App.Session.IsActive ? "\nSessões isoladas: cada janela guarda só o próprio login." : "")
             : "Desligada — o Roblox só permite uma janela por vez." +
               (App.Multi.LastError != null ? "\nÚltimo erro: " + App.Multi.LastError : "");
         MultiClawd.Mood = on ? ClawdMood.Idle : ClawdMood.Sleeping;
@@ -627,7 +653,7 @@ public partial class MainWindow : Window
         button.IsEnabled = false;
         try
         {
-            var result = await Task.Run(() => RobloxHandleCloser.Run(true, App.Settings.ReleaseCookieLock));
+            var result = await Task.Run(() => RobloxHandleCloser.Run(true, cookieLock: false));
             if (result.Processes == 0)
             {
                 ShowToast("Nenhum Roblox aberto — nada para liberar.");
@@ -961,7 +987,8 @@ public partial class MainWindow : Window
         var s = App.Settings;
         SetMultiStartup.IsChecked = s.MultiInstanceOnStartup;
         SetLegacyMutex.IsChecked = s.HoldLegacyMutex;
-        SetCookieLock.IsChecked = s.ReleaseCookieLock;
+        SetIsolate.IsChecked = s.IsolateSessions;
+        SetCloseDuplicates.IsChecked = s.CloseDuplicateSessions;
         SetRename.IsChecked = s.RenameWindows;
         SetTray.IsChecked = s.MinimizeToTray;
         (s.DirectLaunch ? SetLaunchDirect : SetLaunchProtocol).IsChecked = true;
@@ -981,7 +1008,9 @@ public partial class MainWindow : Window
         bool legacyBefore = s.HoldLegacyMutex;
         s.MultiInstanceOnStartup = SetMultiStartup.IsChecked == true;
         s.HoldLegacyMutex = SetLegacyMutex.IsChecked == true;
-        s.ReleaseCookieLock = SetCookieLock.IsChecked == true;
+        bool isolateBefore = s.IsolateSessions;
+        s.IsolateSessions = SetIsolate.IsChecked == true;
+        s.CloseDuplicateSessions = SetCloseDuplicates.IsChecked == true;
         s.RenameWindows = SetRename.IsChecked == true;
         s.MinimizeToTray = SetTray.IsChecked == true;
         s.DirectLaunch = SetLaunchDirect.IsChecked == true;
@@ -992,6 +1021,10 @@ public partial class MainWindow : Window
         {
             App.Multi.Disable();
             _ = EnableMultiAsync(quiet: true);
+        }
+        else if (isolateBefore != s.IsolateSessions)
+        {
+            _ = ApplySessionIsolationAsync().ContinueWith(_ => Dispatcher.BeginInvoke(UpdateMultiUi));
         }
     }
 
